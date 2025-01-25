@@ -1,0 +1,249 @@
+#w1权重变化下遗传结果（x,y) Z以及3个重要参数的变化 尚且需要修改
+#修改方向：去掉W1关于自身变化的图像 加上这几个参考函数中其他重要参数的变化 
+import numpy as np
+import matplotlib.pyplot as plt
+from deap import base, creator, tools, algorithms
+
+# 定义模型参数
+V_max = 20000
+C_limit = 5000
+S_min = 50
+R = 150
+alpha, beta = 0.1, 0.00001
+gamma, delta = 0.05, 0.00001
+S_0, eta, zeta = 100, 10, 0.001
+
+# 定义模型函数
+def revenue(V):
+    return V * R
+
+def carbon_footprint(V):
+    return alpha * V + beta * V**2
+
+def infrastructure_load(V):
+    return gamma * V + delta * V**2
+
+def resident_satisfaction(V):
+    return S_0 + eta * np.log(1 + V) - zeta * V
+
+def objective_function(V, w1, w2, w3, w4):
+    I = infrastructure_load(V)
+    C = carbon_footprint(V)
+    F = infrastructure_load(V)
+    S = resident_satisfaction(V)
+    return (w1 * (revenue(V) / (V_max * R)) -
+            w2 * (C / C_limit) -
+            w3 * (F / infrastructure_load(V_max)) +
+            w4 * (S / S_0))
+
+# 遗传算法实现
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMax)
+
+toolbox = base.Toolbox()
+toolbox.register("attr_float", np.random.uniform, 0.5 * V_max, V_max)
+toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=1)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+toolbox.register("evaluate", lambda ind: (objective_function(ind[0], *weights),))
+toolbox.register("mate", tools.cxBlend, alpha=0.5)
+toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=1000, indpb=0.3)
+toolbox.register("select", tools.selTournament, tournsize=3)
+
+# 权重敏感性分析
+w1_values = np.linspace(0.1, 0.9, 50)  # 更小的步长
+results = {"w1": w1_values, "Z": [], "R": [], "I": [], "E": [], "S": []}
+
+for w1 in w1_values:
+    w2 = 0.25
+    w3 = 0.2
+    w4 = 1 - w1 - w2 - w3  # 确保权重和为1
+    weights = (w1, w2, w3, w4)
+    pop = toolbox.population(n=100)
+    N = 50
+    for gen in range(N):
+        offspring = algorithms.varAnd(pop, toolbox, cxpb=0.8, mutpb=0.3)
+        fits = list(map(toolbox.evaluate, offspring))
+        for fit, ind in zip(fits, offspring):
+            ind.fitness.values = fit
+        pop = toolbox.select(offspring, k=len(pop))
+    best_ind = tools.selBest(pop, k=1)[0]
+    results["Z"].append(best_ind.fitness.values[0])
+    results["R"].append(revenue(best_ind[0]))
+    results["I"].append(infrastructure_load(best_ind[0]))
+    results["E"].append(carbon_footprint(best_ind[0]))
+    results["S"].append(resident_satisfaction(best_ind[0]))
+
+# 绘制结果
+fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+fig.suptitle('Sensitivity Analysis of Weights', fontsize=16)
+
+axs[0, 0].plot(results["w1"], results["Z"], marker='o', color='blue')
+axs[0, 0].set_title('Objective Function Z')
+axs[0, 0].set_xlabel('Weight $w_1$')
+axs[0, 0].set_ylabel('Z')
+
+axs[0, 1].plot(results["w1"], results["R"], marker='o', color='green')
+axs[0, 1].set_title('Revenue R')
+axs[0, 1].set_xlabel('Weight $w_1$')
+axs[0, 1].set_ylabel('R')
+
+axs[0, 2].plot(results["w1"], results["I"], marker='o', color='red')
+axs[0, 2].set_title('Infrastructure Load I')
+axs[0, 2].set_xlabel('Weight $w_1$')
+axs[0, 2].set_ylabel('I')
+
+axs[1, 0].plot(results["w1"], results["E"], marker='o', color='cyan')
+axs[1, 0].set_title('Carbon Footprint E')
+axs[1, 0].set_xlabel('Weight $w_1$')
+axs[1, 0].set_ylabel('E')
+
+axs[1, 1].plot(results["w1"], results["S"], marker='o', color='magenta')
+axs[1, 1].set_title('Resident Satisfaction S')
+axs[1, 1].set_xlabel('Weight $w_1$')
+axs[1, 1].set_ylabel('S')
+
+axs[1, 2].plot(results["w1"], results["w1"], marker='o', color='yellow')
+axs[1, 2].set_title('Weight $w_1$')
+#part2
+#几个重要参数的敏感性分析 当前还很粗浅 需要进一步划分值域进行plot 以及函数图像的美化
+#第二个考虑是目标函数的图像变成三维图像 形象直观的展示在参数动荡的情况下目标函数的最优结果变化
+import numpy as np
+import matplotlib.pyplot as plt
+from deap import base, creator, tools, algorithms
+
+# 定义模型参数
+V_max = 20000
+C_limit = 5000
+S_min = 50
+R = 150
+alpha, beta = 0.1, 0.00001
+gamma, delta = 0.05, 0.00001
+S_0, eta, zeta = 100, 10, 0.001
+
+# 定义模型函数
+def revenue(V):
+    return V * R
+
+def carbon_footprint(V):
+    return alpha * V + beta * V**2
+
+def infrastructure_load(V):
+    return gamma * V + delta * V**2
+
+def resident_satisfaction(V):
+    return S_0 + eta * np.log(1 + V) - zeta * V
+
+def objective_function(V, w1, w2, w3, w4, C1, C2, C3, alpha, beta, gamma, delta, eta, zeta):
+    I = infrastructure_load(V)
+    C = carbon_footprint(V)
+    F = infrastructure_load(V)
+    S = resident_satisfaction(V)
+    return (w1 * (revenue(V) / (V_max * R)) -
+            w2 * (C / C1) -
+            w3 * (F / C2) +
+            w4 * (S / C3))
+
+# 遗传算法实现
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMax)
+
+toolbox = base.Toolbox()
+toolbox.register("attr_float", np.random.uniform, 0.5 * V_max, V_max)
+toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_float, n=1)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+toolbox.register("evaluate", lambda ind: (objective_function(ind[0], 0.35, 0.25, 0.2, 0.2, C1, C2, C3, alpha, beta, gamma, delta, eta, zeta),))
+toolbox.register("mate", tools.cxBlend, alpha=0.5)
+toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=1000, indpb=0.3)
+toolbox.register("select", tools.selTournament, tournsize=3)
+
+# 参数敏感性分析
+params = {
+    "C1": np.linspace(0.9 * C_limit, 1.1 * C_limit, 50),
+    "C2": np.linspace(0.9 * C_limit, 1.1 * C_limit, 50),
+    "C3": np.linspace(0.9 * C_limit, 1.1 * C_limit, 50),
+    "alpha": np.linspace(0.05, 0.15, 50),
+    "beta": np.linspace(0.00001, 0.0001, 50),
+    "gamma": np.linspace(0.01, 0.1, 50),
+    "delta": np.linspace(0.00001, 0.001, 50),
+    "eta": np.linspace(5, 15, 50),
+    "zeta": np.linspace(0.0001, 0.01, 50)
+}
+
+results = {key: {"values": [], "Z": [], "R": [], "I": [], "E": [], "S": []} for key in params}
+
+for param, values in params.items():
+    for value in values:
+        if param == "C1":
+            C1 = value
+            C2, C3 = C_limit, C_limit
+            alpha, beta, gamma, delta, eta, zeta = alpha, beta, gamma, delta, eta, zeta
+        elif param == "C2":
+            C2 = value
+            C1, C3 = C_limit, C_limit
+            alpha, beta, gamma, delta, eta, zeta = alpha, beta, gamma, delta, eta, zeta
+        elif param == "C3":
+            C3 = value
+            C1, C2 = C_limit, C_limit
+            alpha, beta, gamma, delta, eta, zeta = alpha, beta, gamma, delta, eta, zeta
+        elif param == "alpha":
+            alpha = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            beta, gamma, delta, eta, zeta = beta, gamma, delta, eta, zeta
+        elif param == "beta":
+            beta = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            alpha, gamma, delta, eta, zeta = alpha, gamma, delta, eta, zeta
+        elif param == "gamma":
+            gamma = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            alpha, beta, delta, eta, zeta = alpha, beta, delta, eta, zeta
+        elif param == "delta":
+            delta = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            alpha, beta, gamma, eta, zeta = alpha, beta, gamma, eta, zeta
+        elif param == "eta":
+            eta = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            alpha, beta, gamma, delta, zeta = alpha, beta, gamma, delta, zeta
+        elif param == "zeta":
+            zeta = value
+            C1, C2, C3 = C_limit, C_limit, C_limit
+            alpha, beta, gamma, delta, eta = alpha, beta, gamma, delta, eta
+
+        pop = toolbox.population(n=100)
+        N = 50
+        for gen in range(N):
+            offspring = algorithms.varAnd(pop, toolbox, cxpb=0.8, mutpb=0.3)
+            fits = list(map(toolbox.evaluate, offspring))
+            for fit, ind in zip(fits, offspring):
+                ind.fitness.values = fit
+            pop = toolbox.select(offspring, k=len(pop))
+        best_ind = tools.selBest(pop, k=1)[0]
+        results[param]["values"].append(value)
+        results[param]["Z"].append(best_ind.fitness.values[0])
+        results[param]["R"].append(revenue(best_ind[0]))
+        results[param]["I"].append(infrastructure_load(best_ind[0]))
+        results[param]["E"].append(carbon_footprint(best_ind[0]))
+        results[param]["S"].append(resident_satisfaction(best_ind[0]))
+
+# 绘制结果
+colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'purple', 'orange']
+
+for i, (param, data) in enumerate(results.items()):
+    plt.figure(figsize=(8, 6))
+    plt.plot(data["values"], data["Z"], marker='o', color=colors[i % len(colors)], label='Objective Function Z')
+    plt.plot(data["values"], data["R"], marker='x', color=colors[(i+1) % len(colors)], label='Revenue R')
+    plt.plot(data["values"], data["I"], marker='+', color=colors[(i+2) % len(colors)], label='Infrastructure Load I')
+    plt.plot(data["values"], data["E"], marker='*', color=colors[(i+3) % len(colors)], label='Carbon Footprint E')
+    plt.plot(data["values"], data["S"], marker='s', color=colors[(i+4) % len(colors)], label='Resident Satisfaction S')
+    plt.title(f'Sensitivity Analysis of {param}')
+    plt.xlabel(param)
+    plt.ylabel('Values')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+axs[1, 2].set_xlabel('Weight $w_1$')
+axs[1, 2].set_ylabel('$w_1$')
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
